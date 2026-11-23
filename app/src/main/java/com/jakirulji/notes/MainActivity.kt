@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jakirulji.notes.data.NoteEntity
+import com.jakirulji.notes.data.FolderRepository
 import com.jakirulji.notes.data.NoteRepository
 import com.jakirulji.notes.data.NotesDatabase
 import kotlinx.coroutines.launch
@@ -31,8 +34,10 @@ private const val DEFAULT_NOTE_COLOR = 0xFFE8E8D8L
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = NoteRepository(NotesDatabase.getInstance(applicationContext).noteDao())
-        setContent { NotesTheme { NotesApp(repository) } }
+        val dao = NotesDatabase.getInstance(applicationContext).noteDao()
+        val repository = NoteRepository(dao)
+        val folderRepository = FolderRepository(dao)
+        setContent { NotesTheme { NotesApp(repository, folderRepository) } }
     }
 }
 
@@ -48,16 +53,21 @@ private fun NotesTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NotesApp(repository: NoteRepository) {
+private fun NotesApp(repository: NoteRepository, folderRepository: FolderRepository) {
     val notes by repository.activeNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val trash by repository.trashedNotes().collectAsStateWithLifecycle(initialValue = emptyList())
+    val folders by folderRepository.folders().collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var showTrash by remember { mutableStateOf(false) }
     var editorOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<NoteEntity?>(null) }
+    var selectedFolderId by remember { mutableStateOf<String?>(null) }
+    var createFolderOpen by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
     val visible = (if (showTrash) trash else notes).filter {
-        (it.title + " " + it.content + " " + it.tags).contains(query, ignoreCase = true)
+        (it.title + " " + it.content + " " + it.tags).contains(query, ignoreCase = true) &&
+            (showTrash || selectedFolderId == null || it.folderId == selectedFolderId)
     }
 
     Scaffold(
@@ -94,6 +104,20 @@ private fun NotesApp(repository: NoteRepository) {
                 Spacer(Modifier.weight(1f))
                 if (showTrash && trash.isNotEmpty()) {
                     TextButton(onClick = { scope.launch { repository.emptyTrash() } }) { Text("Empty") }
+                }
+            }
+            if (!showTrash) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(selected = selectedFolderId == null, onClick = { selectedFolderId = null }, label = { Text("All folders") })
+                    folders.forEach { folder ->
+                        FilterChip(selected = selectedFolderId == folder.id, onClick = { selectedFolderId = folder.id }, label = { Text(folder.name) })
+                    }
+                    AssistChip(onClick = { newFolderName = ""; createFolderOpen = true }, label = { Text("+ Folder") })
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -138,13 +162,36 @@ private fun NotesApp(repository: NoteRepository) {
         }
     }
 
+    if (createFolderOpen) {
+        AlertDialog(
+            onDismissRequest = { createFolderOpen = false },
+            title = { Text("Create folder") },
+            text = {
+                OutlinedTextField(
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    singleLine = true,
+                    placeholder = { Text("Folder name") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = newFolderName.trim()
+                    if (name.isNotEmpty()) scope.launch { folderRepository.create(name) }
+                    createFolderOpen = false
+                }) { Text("Create") }
+            },
+            dismissButton = { TextButton(onClick = { createFolderOpen = false }) { Text("Cancel") } }
+        )
+    }
+
     if (editorOpen) {
         NoteEditor(
             note = editing,
             onClose = { editorOpen = false },
             onSave = { title, body, tags ->
                 scope.launch {
-                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags)
+                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
                     editorOpen = false
                 }
             }
