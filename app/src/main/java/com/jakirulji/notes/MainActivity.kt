@@ -3,9 +3,7 @@ package com.jakirulji.notes
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,104 +17,186 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jakirulji.notes.data.NoteEntity
+import com.jakirulji.notes.data.NoteRepository
+import com.jakirulji.notes.data.NotesDatabase
+import kotlinx.coroutines.launch
 
 private val Ink = Color(0xFF20211F)
 private val Paper = Color(0xFFF7F6F1)
 private val Accent = Color(0xFF667B63)
-
-data class Note(val id: Int, val title: String, val body: String, val color: Color, val pinned: Boolean = false)
+private const val DEFAULT_NOTE_COLOR = 0xFFE8E8D8L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { NotesTheme { NotesApp() } }
+        val repository = NoteRepository(NotesDatabase.getInstance(applicationContext).noteDao())
+        setContent { NotesTheme { NotesApp(repository) } }
     }
 }
 
 @Composable
 private fun NotesTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = lightColorScheme(
-        primary = Accent, onPrimary = Color.White, background = Paper,
-        surface = Color.White, onSurface = Ink, secondary = Color(0xFFD7B98E)
-    ), content = content)
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = Accent, onPrimary = Color.White, background = Paper,
+            surface = Color.White, onSurface = Ink, secondary = Color(0xFFD7B98E)
+        ),
+        content = content
+    )
 }
 
 @Composable
-private fun NotesApp() {
-    var notes by remember { mutableStateOf(listOf(
-        Note(1, "A little space to think", "Collect ideas, plans and the small things worth remembering.", Color(0xFFE8E8D8), true),
-        Note(2, "Today", "• Review priorities\n• Take a quiet walk\n• Make time to read", Color(0xFFF3E6D6)),
-        Note(3, "Ideas", "A place for unfinished thoughts and new beginnings.", Color(0xFFE4EAF0))
-    )) }
+private fun NotesApp(repository: NoteRepository) {
+    val notes by repository.activeNotes().collectAsStateWithLifecycle(initialValue = emptyList())
+    val trash by repository.trashedNotes().collectAsStateWithLifecycle(initialValue = emptyList())
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
+    var showTrash by remember { mutableStateOf(false) }
     var editorOpen by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Note?>(null) }
-    val visible = notes.filter { (it.title + it.body).contains(query, true) }.sortedByDescending { it.pinned }
+    var editing by remember { mutableStateOf<NoteEntity?>(null) }
+    val visible = (if (showTrash) trash else notes).filter {
+        (it.title + " " + it.content + " " + it.tags).contains(query, ignoreCase = true)
+    }
 
-    Scaffold(containerColor = Paper, floatingActionButton = {
-        ExtendedFloatingActionButton(onClick = { editing = null; editorOpen = true }, containerColor = Ink, contentColor = Color.White, shape = RoundedCornerShape(18.dp)) {
-            Text("+", fontSize = 22.sp); Spacer(Modifier.width(8.dp)); Text("New note")
+    Scaffold(
+        containerColor = Paper,
+        floatingActionButton = {
+            if (!showTrash) {
+                ExtendedFloatingActionButton(
+                    onClick = { editing = null; editorOpen = true },
+                    containerColor = Ink, contentColor = Color.White,
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text("+", fontSize = 22.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("New note")
+                }
+            }
         }
-    }) { padding ->
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 22.dp)) {
             Spacer(Modifier.height(28.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("YOUR SPACE", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text("Notes", fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text(if (showTrash) "YOUR ARCHIVE" else "YOUR SPACE", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(if (showTrash) "Trash" else "Notes", fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = Ink)
                 }
-                Box(Modifier.size(42.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) { Text("✦", color = Accent, fontSize = 20.sp) }
+                Box(Modifier.size(42.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                    Text("✦", color = Accent, fontSize = 20.sp)
+                }
             }
-            Spacer(Modifier.height(22.dp))
-            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search your thoughts") }, leadingIcon = { Text("⌕", fontSize = 24.sp) }, shape = RoundedCornerShape(18.dp), singleLine = true, colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White, unfocusedBorderColor = Color.Transparent, focusedBorderColor = Accent))
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !showTrash, onClick = { showTrash = false; query = "" }, label = { Text("Notes") })
+                FilterChip(selected = showTrash, onClick = { showTrash = true; query = "" }, label = { Text("Trash") })
+                Spacer(Modifier.weight(1f))
+                if (showTrash && trash.isNotEmpty()) {
+                    TextButton(onClick = { scope.launch { repository.emptyTrash() } }) { Text("Empty") }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search your thoughts") }, leadingIcon = { Text("⌕", fontSize = 24.sp) },
+                shape = RoundedCornerShape(18.dp), singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = Color.White, focusedContainerColor = Color.White,
+                    unfocusedBorderColor = Color.Transparent, focusedBorderColor = Accent
+                )
+            )
+            Spacer(Modifier.height(20.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Recent notes", fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                Spacer(Modifier.weight(1f)); Text("${visible.size} NOTES", color = Color.Gray, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text(if (showTrash) "Recently deleted" else "Recent notes", fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                Text("${visible.size} ITEMS", color = Color.Gray, fontSize = 10.sp, letterSpacing = 1.sp)
             }
             Spacer(Modifier.height(12.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 100.dp)) {
-                items(visible, key = { it.id }) { note ->
-                    NoteCard(note) { editing = note; editorOpen = true }
+            if (visible.isEmpty()) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text(if (showTrash) "Your trash is empty" else "A clear space for your next thought.", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 100.dp)
+                ) {
+                    items(visible, key = { it.id }) { note ->
+                        NoteCard(
+                            note = note, inTrash = showTrash,
+                            onOpen = { if (!showTrash) { editing = note; editorOpen = true } },
+                            onPin = { scope.launch { repository.togglePin(note) } },
+                            onTrash = { scope.launch { repository.trash(note.id) } },
+                            onRestore = { scope.launch { repository.restore(note.id) } },
+                            onDeleteForever = { scope.launch { repository.deleteForever(note.id) } }
+                        )
+                    }
                 }
             }
         }
     }
-    if (editorOpen) NoteEditor(editing, onClose = { editorOpen = false }, onSave = { title, body ->
-        val old = editing
-        notes = if (old == null) notes + Note((notes.maxOfOrNull { it.id } ?: 0) + 1, title, body, Color(0xFFE8E8D8))
-        else notes.map { if (it.id == old.id) it.copy(title = title, body = body) else it }
-        editorOpen = false
-    })
+
+    if (editorOpen) {
+        NoteEditor(
+            note = editing,
+            onClose = { editorOpen = false },
+            onSave = { title, body ->
+                scope.launch {
+                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR)
+                    editorOpen = false
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun NoteCard(note: Note, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = note.color, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+private fun NoteCard(
+    note: NoteEntity, inTrash: Boolean, onOpen: () -> Unit, onPin: () -> Unit,
+    onTrash: () -> Unit, onRestore: () -> Unit, onDeleteForever: () -> Unit
+) {
+    Surface(onClick = onOpen, color = Color(note.color.toInt()), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(note.title, modifier = Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                if (note.pinned) Text("PIN", color = Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                if (note.pinned && !inTrash) Text("PIN", color = Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(note.body, color = Ink.copy(alpha = .72f), fontSize = 13.sp, lineHeight = 19.sp, maxLines = 3)
-            Spacer(Modifier.height(12.dp))
-            Text("OPEN NOTE  ↗", color = Ink.copy(alpha = .55f), fontSize = 9.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold)
+            if (note.content.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(note.content, color = Ink.copy(alpha = .72f), fontSize = 13.sp, lineHeight = 19.sp, maxLines = 4)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inTrash) {
+                    TextButton(onClick = onRestore) { Text("Restore") }
+                    TextButton(onClick = onDeleteForever) { Text("Delete forever", color = MaterialTheme.colorScheme.error) }
+                } else {
+                    TextButton(onClick = onPin) { Text(if (note.pinned) "Unpin" else "Pin") }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onTrash) { Text("Move to trash") }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun NoteEditor(note: Note?, onClose: () -> Unit, onSave: (String, String) -> Unit) {
-    var title by remember(note) { mutableStateOf(note?.title.orEmpty()) }
-    var body by remember(note) { mutableStateOf(note?.body.orEmpty()) }
-    AlertDialog(onDismissRequest = onClose, containerColor = Paper,
+private fun NoteEditor(note: NoteEntity?, onClose: () -> Unit, onSave: (String, String) -> Unit) {
+    var title by remember(note?.id) { mutableStateOf(note?.title.orEmpty()) }
+    var body by remember(note?.id) { mutableStateOf(note?.content.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onClose, containerColor = Paper,
         title = { Text(if (note == null) "New note" else "Edit note", fontWeight = FontWeight.SemiBold) },
-        text = { Column {
-            OutlinedTextField(title, { title = it }, placeholder = { Text("Title") }, singleLine = true)
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(body, { body = it }, placeholder = { Text("Start writing…") }, minLines = 5)
-        } },
+        text = {
+            Column {
+                OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Title") }, singleLine = true)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(value = body, onValueChange = { body = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Start writing…") }, minLines = 5)
+            }
+        },
         confirmButton = { TextButton(onClick = { onSave(title.ifBlank { "Untitled" }, body) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
+    )
 }
