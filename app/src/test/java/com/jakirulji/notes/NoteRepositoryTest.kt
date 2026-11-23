@@ -1,0 +1,111 @@
+package com.jakirulji.notes
+
+import com.jakirulji.notes.data.NoteDao
+import com.jakirulji.notes.data.NoteEntity
+import com.jakirulji.notes.data.NoteRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class NoteRepositoryTest {
+    @Test
+    fun saveCreatesPersistentNoteWithNormalizedTitle() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+
+        repository.save(null, "   ", "First thought", 0xFFE8E8D8L)
+
+        val saved = dao.items.value.single()
+        assertNotNull(saved.id)
+        assertEquals("Untitled", saved.title)
+        assertEquals("First thought", saved.content)
+        assertNull(saved.trashedAt)
+    }
+
+    @Test
+    fun updatePreservesIdentityCreationTimeAndPinState() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        val original = NoteEntity(
+            id = "stable-id", title = "Old", content = "Body", color = 0xFFE8E8D8L,
+            pinned = true, createdAt = 10L, updatedAt = 10L
+        )
+        dao.upsert(original)
+
+        repository.save(original.id, "Updated", "New body", original.color)
+
+        val updated = dao.items.value.single()
+        assertEquals("stable-id", updated.id)
+        assertEquals(10L, updated.createdAt)
+        assertTrue(updated.pinned)
+        assertEquals("Updated", updated.title)
+        assertEquals("New body", updated.content)
+    }
+
+    @Test
+    fun trashRestoreAndPermanentDeleteHaveDistinctSemantics() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        repository.save(null, "Keep me", "", 0xFFE8E8D8L)
+        val id = dao.items.value.single().id
+
+        repository.trash(id)
+        assertNotNull(dao.items.value.single().trashedAt)
+
+        repository.restore(id)
+        assertNull(dao.items.value.single().trashedAt)
+
+        repository.trash(id)
+        repository.deleteForever(id)
+        assertTrue(dao.items.value.isEmpty())
+    }
+
+    private class FakeNoteDao : NoteDao {
+        val items = MutableStateFlow<List<NoteEntity>>(emptyList())
+
+        override fun observeActive(): Flow<List<NoteEntity>> =
+            MutableStateFlow(items.value.filter { it.trashedAt == null })
+
+        override fun observeTrash(): Flow<List<NoteEntity>> =
+            MutableStateFlow(items.value.filter { it.trashedAt != null })
+
+        override suspend fun findById(id: String): NoteEntity? =
+            items.value.firstOrNull { it.id == id }
+
+        override suspend fun upsert(note: NoteEntity) {
+            items.value = items.value.filterNot { it.id == note.id } + note
+        }
+
+        override suspend fun moveToTrash(id: String, time: Long) {
+            items.value = items.value.map {
+                if (it.id == id && it.trashedAt == null) it.copy(trashedAt = time, updatedAt = time) else it
+            }
+        }
+
+        override suspend fun restore(id: String, time: Long) {
+            items.value = items.value.map {
+                if (it.id == id) it.copy(trashedAt = null, updatedAt = time) else it
+            }
+        }
+
+        override suspend fun permanentlyDelete(id: String) {
+            items.value = items.value.filterNot { it.id == id && it.trashedAt != null }
+        }
+
+        override suspend fun emptyTrash() {
+            items.value = items.value.filter { it.trashedAt == null }
+        }
+
+        override suspend fun setPinned(id: String, pinned: Boolean, time: Long) {
+            items.value = items.value.map {
+                if (it.id == id) it.copy(pinned = pinned, updatedAt = time) else it
+            }
+        }
+    }
+}
