@@ -81,7 +81,7 @@ class NoteRepositoryTest {
         assertEquals(folderId, dao.items.value.single().folderId)
 
         folders.rename(folderId, "Medical")
-        assertEquals("Medical", folders.folders().let { dao.findFolder(folderId)?.name })
+        assertEquals("Medical", dao.findFolder(folderId)?.name)
 
         folders.delete(folderId)
         assertNull(dao.items.value.single().folderId)
