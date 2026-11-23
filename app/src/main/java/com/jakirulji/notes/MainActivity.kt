@@ -142,9 +142,9 @@ private fun NotesApp(repository: NoteRepository) {
         NoteEditor(
             note = editing,
             onClose = { editorOpen = false },
-            onSave = { title, body ->
+            onSave = { title, body, tags ->
                 scope.launch {
-                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR)
+                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags)
                     editorOpen = false
                 }
             }
@@ -183,9 +183,10 @@ private fun NoteCard(
 }
 
 @Composable
-private fun NoteEditor(note: NoteEntity?, onClose: () -> Unit, onSave: (String, String) -> Unit) {
+private fun NoteEditor(note: NoteEntity?, onClose: () -> Unit, onSave: (String, String, String) -> Unit) {
     var title by remember(note?.id) { mutableStateOf(note?.title.orEmpty()) }
     var body by remember(note?.id) { mutableStateOf(note?.content.orEmpty()) }
+    var tags by remember(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
     AlertDialog(
         onDismissRequest = onClose, containerColor = Paper,
         title = { Text(if (note == null) "New note" else "Edit note", fontWeight = FontWeight.SemiBold) },
@@ -194,9 +195,11 @@ private fun NoteEditor(note: NoteEntity?, onClose: () -> Unit, onSave: (String, 
                 OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Title") }, singleLine = true)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(value = body, onValueChange = { body = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Start writing…") }, minLines = 5)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(value = tags, onValueChange = { tags = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Tags (comma separated)") }, singleLine = true)
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(title.ifBlank { "Untitled" }, body) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onSave(title.ifBlank { "Untitled" }, body, tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
     )
 }
