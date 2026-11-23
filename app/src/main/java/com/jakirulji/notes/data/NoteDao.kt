@@ -11,6 +11,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE trashedAt IS NULL ORDER BY pinned DESC, updatedAt DESC")
     fun observeActive(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM notes WHERE trashedAt IS NULL AND folderId = :folderId ORDER BY pinned DESC, updatedAt DESC")
+    fun observeFolder(folderId: String): Flow<List<NoteEntity>>
+
     @Query("SELECT * FROM notes WHERE trashedAt IS NOT NULL ORDER BY trashedAt DESC")
     fun observeTrash(): Flow<List<NoteEntity>>
 
@@ -34,4 +37,22 @@ interface NoteDao {
 
     @Query("UPDATE notes SET pinned = :pinned, updatedAt = :time WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean, time: Long)
+
+    @Query("UPDATE notes SET folderId = :folderId, updatedAt = :time WHERE id = :noteId")
+    suspend fun moveToFolder(noteId: String, folderId: String?, time: Long)
+
+    @Query("UPDATE notes SET folderId = NULL WHERE folderId = :folderId")
+    suspend fun detachFolder(folderId: String)
+
+    @Query("SELECT * FROM folders ORDER BY name COLLATE NOCASE")
+    fun observeFolders(): Flow<List<FolderEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertFolder(folder: FolderEntity)
+
+    @Query("DELETE FROM folders WHERE id = :id")
+    suspend fun deleteFolder(id: String)
+
+    @Query("SELECT * FROM folders WHERE id = :id LIMIT 1")
+    suspend fun findFolder(id: String): FolderEntity?
 }
