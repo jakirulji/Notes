@@ -3,6 +3,7 @@ package com.jakirulji.notes
 import com.jakirulji.notes.data.NoteDao
 import com.jakirulji.notes.data.NoteEntity
 import com.jakirulji.notes.data.FolderEntity
+import com.jakirulji.notes.data.FolderRepository
 import com.jakirulji.notes.data.NoteRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +66,25 @@ class NoteRepositoryTest {
         repository.trash(id)
         repository.deleteForever(id)
         assertTrue(dao.items.value.isEmpty())
+    }
+
+    @Test
+    fun folderLifecycleMovesNotesAndDetachesOnDelete() = runBlocking {
+        val dao = FakeNoteDao()
+        val notes = NoteRepository(dao)
+        val folders = FolderRepository(dao)
+        notes.save(null, "Folder note", "", 0xFFE8E8D8L)
+        val noteId = dao.items.value.single().id
+
+        val folderId = folders.create("Study")
+        folders.moveNote(noteId, folderId)
+        assertEquals(folderId, dao.items.value.single().folderId)
+
+        folders.rename(folderId, "Medical")
+        assertEquals("Medical", folders.folders().let { dao.findFolder(folderId)?.name })
+
+        folders.delete(folderId)
+        assertNull(dao.items.value.single().folderId)
     }
 
     private class FakeNoteDao : NoteDao {
