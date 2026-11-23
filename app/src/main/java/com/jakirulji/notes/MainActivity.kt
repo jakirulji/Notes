@@ -149,8 +149,9 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                 ) {
                     items(visible, key = { it.id }) { note ->
                         NoteCard(
-                            note = note, inTrash = showTrash,
+                            note = note, inTrash = showTrash, folders = folders,
                             onOpen = { if (!showTrash) { editing = note; editorOpen = true } },
+                            onMoveFolder = { folderId -> scope.launch { folderRepository.moveNote(note.id, folderId) } },
                             onPin = { scope.launch { repository.togglePin(note) } },
                             onTrash = { scope.launch { repository.trash(note.id) } },
                             onRestore = { scope.launch { repository.restore(note.id) } },
@@ -201,9 +202,11 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
 
 @Composable
 private fun NoteCard(
-    note: NoteEntity, inTrash: Boolean, onOpen: () -> Unit, onPin: () -> Unit,
+    note: NoteEntity, inTrash: Boolean, folders: List<com.jakirulji.notes.data.FolderEntity>,
+    onOpen: () -> Unit, onMoveFolder: (String?) -> Unit, onPin: () -> Unit,
     onTrash: () -> Unit, onRestore: () -> Unit, onDeleteForever: () -> Unit
 ) {
+    var folderMenuOpen by remember(note.id) { mutableStateOf(false) }
     Surface(onClick = onOpen, color = Color(note.color.toInt()), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,6 +224,15 @@ private fun NoteCard(
                     TextButton(onClick = onDeleteForever) { Text("Delete forever", color = MaterialTheme.colorScheme.error) }
                 } else {
                     TextButton(onClick = onPin) { Text(if (note.pinned) "Unpin" else "Pin") }
+                    Box {
+                        TextButton(onClick = { folderMenuOpen = true }) { Text("Folder") }
+                        DropdownMenu(expanded = folderMenuOpen, onDismissRequest = { folderMenuOpen = false }) {
+                            DropdownMenuItem(text = { Text("No folder") }, onClick = { onMoveFolder(null); folderMenuOpen = false })
+                            folders.forEach { folder ->
+                                DropdownMenuItem(text = { Text(folder.name) }, onClick = { onMoveFolder(folder.id); folderMenuOpen = false })
+                            }
+                        }
+                    }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onTrash) { Text("Move to trash") }
                 }
