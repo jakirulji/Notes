@@ -4,7 +4,9 @@
 - Android application shell and Compose Material 3 interface are in place.
 - Normal notes are stored in a local Room database through `NoteDao` and `NoteRepository`.
 - The current UI supports note create/edit, local search, pin/unpin, trash, restore and permanent deletion.
-- Folder creation, folder filtering, note-to-folder assignment, folder rename/delete and comma-separated note tags are implemented through Room-backed repositories.
+- Folder creation/filtering, moving notes between folders, folder rename/delete operations and comma-separated note tags are implemented through Room-backed repositories.
+- The note-card UI can reassign an existing note to any folder or remove its folder assignment.
+- Room schema export is configured under `app/schemas` for migration review.
 - Database v1-to-v2 migration creates the folders table without destructive migration.
 - Repository unit tests cover title normalization, update identity/pin preservation, trash lifecycle and folder lifecycle.
 - Rich text, attachments, reminders, reliable autosave, vault isolation and cryptographic storage remain planned work, not implemented features.
