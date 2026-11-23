@@ -23,7 +23,6 @@ abstract class NotesDatabase : RoomDatabase() {
                         updatedAt INTEGER NOT NULL
                     )"""
                 )
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_folderId ON notes(folderId)")
             }
         }
 
