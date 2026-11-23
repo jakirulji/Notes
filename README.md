@@ -1,11 +1,16 @@
 # Notes
 
-An offline-first Android notes app with a premium, calm interface and privacy-focused vault features.
+An offline-first Android notes app with a calm, premium interface and privacy-focused vault features.
 
-**Status:** Early foundation scaffold. Not yet feature-complete.
+**Current status:** M1 is in progress. The app now stores normal notes in a local Room database and includes create/edit, search, pin/unpin, trash, restore and permanent deletion. Rich text, attachments, folders, tags UI, reminders, autosave, hidden vault, decoy vault, encryption and encrypted backup are not yet complete.
 
-## Build
-Requires JDK 17 and Gradle 8.9.
+## Development
+
+- Active branch: `dev`
+- Stable branch: `main` (kept separate; do not merge without an explicit release decision)
+- Android: Kotlin, Jetpack Compose, Material 3, Room
+- Minimum Android version: API 26
+- JDK 17 and Gradle 8.9
 
 ```bash
 gradle testDebugUnitTest
@@ -13,7 +18,9 @@ gradle assembleDebug
 ```
 
 ## Scope
-Google Drive Sync is intentionally excluded from the current development scope. The product plan remains in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
+
+Google Drive Sync is excluded. The current product is offline-first; future backup work is limited to local encrypted export/import unless the scope is explicitly changed.
 
 ## License
+
 Apache-2.0.
