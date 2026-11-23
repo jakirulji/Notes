@@ -4,8 +4,10 @@
 - Android application shell and Compose Material 3 interface are in place.
 - Normal notes are stored in a local Room database through `NoteDao` and `NoteRepository`.
 - The current UI supports note create/edit, local search, pin/unpin, trash, restore and permanent deletion.
-- Repository unit tests cover title normalization, update identity/pin preservation, and trash lifecycle.
-- Rich text, attachments, folders, tags management, reminders, robust autosave, vault isolation and cryptographic storage remain planned work, not implemented features.
+- Folder creation, folder filtering, note-to-folder assignment, folder rename/delete and comma-separated note tags are implemented through Room-backed repositories.
+- Database v1-to-v2 migration creates the folders table without destructive migration.
+- Repository unit tests cover title normalization, update identity/pin preservation, trash lifecycle and folder lifecycle.
+- Rich text, attachments, reminders, reliable autosave, vault isolation and cryptographic storage remain planned work, not implemented features.
 
 ## Target boundaries
 - **app**: application entry point, navigation host and composition root.
