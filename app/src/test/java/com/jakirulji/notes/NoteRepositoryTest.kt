@@ -2,6 +2,7 @@ package com.jakirulji.notes
 
 import com.jakirulji.notes.data.NoteDao
 import com.jakirulji.notes.data.NoteEntity
+import com.jakirulji.notes.data.FolderEntity
 import com.jakirulji.notes.data.NoteRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,12 +69,29 @@ class NoteRepositoryTest {
 
     private class FakeNoteDao : NoteDao {
         val items = MutableStateFlow<List<NoteEntity>>(emptyList())
+        private val folders = MutableStateFlow<List<FolderEntity>>(emptyList())
 
         override fun observeActive(): Flow<List<NoteEntity>> =
             MutableStateFlow(items.value.filter { it.trashedAt == null })
 
         override fun observeTrash(): Flow<List<NoteEntity>> =
             MutableStateFlow(items.value.filter { it.trashedAt != null })
+
+        override fun observeFolder(folderId: String): Flow<List<NoteEntity>> =
+            MutableStateFlow(items.value.filter { it.folderId == folderId && it.trashedAt == null })
+
+        override fun observeFolders(): Flow<List<FolderEntity>> = folders
+
+        override suspend fun upsertFolder(folder: FolderEntity) {
+            folders.value = folders.value.filterNot { it.id == folder.id } + folder
+        }
+
+        override suspend fun deleteFolder(id: String) {
+            folders.value = folders.value.filterNot { it.id == id }
+        }
+
+        override suspend fun findFolder(id: String): FolderEntity? =
+            folders.value.firstOrNull { it.id == id }
 
         override suspend fun findById(id: String): NoteEntity? =
             items.value.firstOrNull { it.id == id }
@@ -105,6 +123,18 @@ class NoteRepositoryTest {
         override suspend fun setPinned(id: String, pinned: Boolean, time: Long) {
             items.value = items.value.map {
                 if (it.id == id) it.copy(pinned = pinned, updatedAt = time) else it
+            }
+        }
+
+        override suspend fun moveToFolder(noteId: String, folderId: String?, time: Long) {
+            items.value = items.value.map {
+                if (it.id == noteId) it.copy(folderId = folderId, updatedAt = time) else it
+            }
+        }
+
+        override suspend fun detachFolder(folderId: String) {
+            items.value = items.value.map {
+                if (it.folderId == folderId) it.copy(folderId = null) else it
             }
         }
     }
