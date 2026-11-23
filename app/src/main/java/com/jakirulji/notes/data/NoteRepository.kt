@@ -12,7 +12,9 @@ class NoteRepository(private val dao: NoteDao) {
         title: String,
         content: String,
         color: Long,
-        pinned: Boolean = false
+        pinned: Boolean = false,
+        tags: String? = null,
+        folderId: String? = null
     ) {
         val now = System.currentTimeMillis()
         val existing = id?.let { dao.findById(it) }
@@ -23,8 +25,8 @@ class NoteRepository(private val dao: NoteDao) {
                 content = content,
                 color = color,
                 pinned = existing?.pinned ?: pinned,
-                folderId = existing?.folderId,
-                tags = existing?.tags.orEmpty(),
+                folderId = folderId ?: existing?.folderId,
+                tags = tags ?: existing?.tags.orEmpty(),
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now,
                 trashedAt = null
