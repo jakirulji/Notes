@@ -81,6 +81,7 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
     val trash by repository.trashedNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val folders by folderRepository.folders().collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var showTrash by remember { mutableStateOf(false) }
     var editorOpen by remember { mutableStateOf(false) }
@@ -128,7 +129,10 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                 if (showTrash && trash.isNotEmpty()) {
                     TextButton(onClick = {
                         trash.forEach { reminderScheduler.cancel(it.id) }
-                        scope.launch { repository.emptyTrash() }
+                        scope.launch {
+                            repository.trashAttachments().forEach { AttachmentStorage.delete(context, it.uri) }
+                            repository.emptyTrash()
+                        }
                     }) { Text("Empty") }
                 }
             }
@@ -181,7 +185,11 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                             onPin = { scope.launch { repository.togglePin(note) } },
                             onTrash = { scope.launch { repository.trash(note.id); reminderScheduler.cancel(note.id) } },
                             onRestore = { scope.launch { repository.restore(note.id) } },
-                            onDeleteForever = { scope.launch { repository.deleteForever(note.id); reminderScheduler.cancel(note.id) } }
+                            onDeleteForever = { scope.launch {
+                                repository.attachmentsOnce(note.id).forEach { AttachmentStorage.delete(context, it.uri) }
+                                repository.deleteForever(note.id)
+                                reminderScheduler.cancel(note.id)
+                            } }
                         )
                     }
                 }
