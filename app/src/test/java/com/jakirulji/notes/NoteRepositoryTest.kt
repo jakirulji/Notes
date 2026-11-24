@@ -135,7 +135,7 @@ class NoteRepositoryTest {
     private class FakeNoteDao : NoteDao {
         val items = MutableStateFlow<List<NoteEntity>>(emptyList())
         private val folders = MutableStateFlow<List<FolderEntity>>(emptyList())
-        private val attachments = MutableStateFlow<List<AttachmentEntity>>(emptyList())
+        val attachments = MutableStateFlow<List<AttachmentEntity>>(emptyList())
 
         override fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>> =
             MutableStateFlow(attachments.value.filter { it.noteId == noteId })
