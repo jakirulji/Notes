@@ -8,8 +8,9 @@
 - The note-card UI can reassign an existing note to any folder or remove its folder assignment.
 - Room schema export is configured under `app/schemas` for migration review.
 - Database v1-to-v2 migration creates the folders table without destructive migration.
-- Repository unit tests cover title normalization, update identity/pin preservation, trash lifecycle and folder lifecycle.
-- Rich text, attachments, reminders, reliable autosave, vault isolation and cryptographic storage remain planned work, not implemented features.
+- Repository unit tests cover title normalization, stable draft IDs across repeated autosaves, update identity/pin preservation, trash lifecycle and folder lifecycle.
+- The editor performs a 700 ms debounced autosave and flushes non-empty drafts when the editor is closed; editor fields and draft identity use saveable Compose state.
+- Rich text, attachments, reminders, vault isolation and cryptographic storage remain planned work, not implemented features.
 
 ## Target boundaries
 - **app**: application entry point, navigation host and composition root.
