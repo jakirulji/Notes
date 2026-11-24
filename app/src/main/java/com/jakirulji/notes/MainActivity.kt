@@ -310,7 +310,8 @@ private fun NoteEditor(
                 title.ifBlank { "Untitled" },
                 body,
                 tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
-                reminderAt
+                reminderAt,
+                selectedColor
             )
         }
     }
