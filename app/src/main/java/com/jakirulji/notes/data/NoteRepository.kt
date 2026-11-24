@@ -50,7 +50,8 @@ class NoteRepository(private val dao: NoteDao) {
                 tags = tags ?: existing?.tags.orEmpty(),
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now,
-                trashedAt = null
+                trashedAt = null,
+                reminderAt = existing?.reminderAt
             )
         )
         return stableId
