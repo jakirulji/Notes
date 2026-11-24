@@ -17,6 +17,15 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE trashedAt IS NOT NULL ORDER BY trashedAt DESC")
     fun observeTrash(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM attachments WHERE noteId = :noteId ORDER BY addedAt")
+    fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAttachment(attachment: AttachmentEntity)
+
+    @Query("DELETE FROM attachments WHERE id = :id")
+    suspend fun deleteAttachment(id: String)
+
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun findById(id: String): NoteEntity?
 
@@ -34,6 +43,9 @@ interface NoteDao {
 
     @Query("DELETE FROM notes WHERE trashedAt IS NOT NULL")
     suspend fun emptyTrash()
+
+    @Query("UPDATE notes SET reminderAt = :reminderAt, updatedAt = :time WHERE id = :id")
+    suspend fun setReminder(id: String, reminderAt: Long?, time: Long)
 
     @Query("UPDATE notes SET pinned = :pinned, updatedAt = :time WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean, time: Long)
