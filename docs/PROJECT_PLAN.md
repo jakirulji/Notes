@@ -16,7 +16,8 @@ Build an offline-first Android notes app inspired by the interaction patterns of
 ### Normal notes
 - Rich-text notes, checklists, folders, tags, pinning, colors, search, reminders, autosave and trash.
 - Image, file and voice attachments.
-- Current editor supports URI-based file attachments and scheduled local reminders; true rich-text editing and voice recording remain to be implemented.
+- The editor uses a WYSIWYG Compose rich-text component; content is serialized as Markdown for local persistence and migration compatibility. Formatting includes bold, italic, H1/H2, ordered/unordered lists and inline code. Checklist/task-list UX, durable app-private attachment copies, voice recording and note color selection remain open M1 acceptance items.
+- Attachments currently persist provider URIs and are best-effort; a provider that revokes access can make an attachment unavailable. This is not yet considered durable attachment storage.
 - Reliable local persistence and migration between app versions.
 
 ### Hidden Vault
