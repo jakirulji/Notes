@@ -1,8 +1,17 @@
 package com.jakirulji.notes
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +38,10 @@ import com.jakirulji.notes.data.NotesDatabase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.Calendar
+import java.text.DateFormat
+import java.util.Date
+import com.jakirulji.notes.notifications.ReminderScheduler
 
 private val Ink = Color(0xFF20211F)
 private val Paper = Color(0xFFF7F6F1)
@@ -40,7 +54,8 @@ class MainActivity : ComponentActivity() {
         val dao = NotesDatabase.getInstance(applicationContext).noteDao()
         val repository = NoteRepository(dao)
         val folderRepository = FolderRepository(dao)
-        setContent { NotesTheme { NotesApp(repository, folderRepository) } }
+        val reminderScheduler = ReminderScheduler(applicationContext)
+        setContent { NotesTheme { NotesApp(repository, folderRepository, reminderScheduler) } }
     }
 }
 
@@ -56,7 +71,7 @@ private fun NotesTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NotesApp(repository: NoteRepository, folderRepository: FolderRepository) {
+private fun NotesApp(repository: NoteRepository, folderRepository: FolderRepository, reminderScheduler: ReminderScheduler) {
     val notes by repository.activeNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val trash by repository.trashedNotes().collectAsStateWithLifecycle(initialValue = emptyList())
     val folders by folderRepository.folders().collectAsStateWithLifecycle(initialValue = emptyList())
@@ -193,11 +208,20 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
         NoteEditor(
             note = editing,
             onClose = { editorOpen = false },
-            onSave = { id, title, body, tags ->
+            onSave = { id, title, body, tags, reminderAt ->
                 scope.launch {
                     repository.save(id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
+                    repository.setReminder(id, reminderAt)
+                    reminderScheduler.schedule(id, title.ifBlank { "Untitled" }, reminderAt)
                 }
-            }
+            },
+            onAttach = { id, title, body, tags, uri, name, mimeType, sizeBytes ->
+                scope.launch {
+                    repository.save(id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
+                    repository.addAttachment(id, uri, name, mimeType, sizeBytes)
+                }
+            },
+            attachmentsFlow = { id -> repository.attachments(id) }
         )
     }
 }
@@ -247,12 +271,18 @@ private fun NoteCard(
 private fun NoteEditor(
     note: NoteEntity?,
     onClose: () -> Unit,
-    onSave: (String, String, String, String) -> Unit
+    onSave: (String, String, String, String, Long?) -> Unit,
+    onAttach: (String, String, String, String, String, String, String, Long) -> Unit,
+    attachmentsFlow: (String) -> kotlinx.coroutines.flow.Flow<List<com.jakirulji.notes.data.AttachmentEntity>>
 ) {
+    val context = LocalContext.current
     val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
     var title by rememberSaveable(note?.id) { mutableStateOf(note?.title.orEmpty()) }
     var body by rememberSaveable(note?.id) { mutableStateOf(note?.content.orEmpty()) }
     var tags by rememberSaveable(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
+    var reminderAt by rememberSaveable(note?.id) { mutableStateOf(note?.reminderAt) }
+    var permissionDenied by remember { mutableStateOf(false) }
+    val attachments by attachmentsFlow(draftId).collectAsStateWithLifecycle(initialValue = emptyList())
 
     fun persistDraft() {
         if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
@@ -260,12 +290,71 @@ private fun NoteEditor(
                 draftId,
                 title.ifBlank { "Untitled" },
                 body,
-                tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
+                tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
+                reminderAt
             )
         }
     }
 
-    LaunchedEffect(draftId, title, body, tags) {
+    fun attachUri(uri: Uri) {
+        try {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: SecurityException) {
+            // Some document providers do not expose persistable grants; the attachment remains best-effort.
+        }
+        var displayName = uri.lastPathSegment ?: "Attachment"
+        var sizeBytes = -1L
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (nameIndex >= 0) displayName = cursor.getString(nameIndex) ?: displayName
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
+            }
+        }
+        onAttach(
+            draftId, title.ifBlank { "Untitled" }, body,
+            tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
+            uri.toString(), displayName, context.contentResolver.getType(uri) ?: "application/octet-stream", sizeBytes
+        )
+    }
+
+    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) attachUri(uri)
+    }
+    var pendingReminder by remember { mutableStateOf<Long?>(null) }
+    fun applyReminder(timestamp: Long) {
+        reminderAt = timestamp
+        onSave(draftId, title.ifBlank { "Untitled" }, body, tags, timestamp)
+        pendingReminder = null
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) pendingReminder?.let(::applyReminder) else {
+            permissionDenied = true
+            pendingReminder = null
+        }
+    }
+    fun chooseReminder() {
+        val now = Calendar.getInstance()
+        DatePickerDialog(context, { _, year, month, day ->
+            val selected = Calendar.getInstance().apply { set(year, month, day) }
+            TimePickerDialog(context, { _, hour, minute ->
+                selected.set(Calendar.HOUR_OF_DAY, hour)
+                selected.set(Calendar.MINUTE, minute)
+                selected.set(Calendar.SECOND, 0)
+                selected.set(Calendar.MILLISECOND, 0)
+                if (selected.timeInMillis > System.currentTimeMillis()) {
+                    val timestamp = selected.timeInMillis
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        pendingReminder = timestamp
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else applyReminder(timestamp)
+                }
+            }, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), false).show()
+        }, now.get(Calendar.YEAR), now.get(Calendar.MONTH), now.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
+    LaunchedEffect(draftId, title, body, tags, reminderAt) {
         if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
             delay(700)
             persistDraft()
@@ -293,6 +382,23 @@ private fun NoteEditor(
                     placeholder = { Text("Start writing…") },
                     minLines = 5
                 )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Attachments", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) { Text("+ Add file") }
+                }
+                attachments.forEach { attachment ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(attachment.displayName, modifier = Modifier.weight(1f), maxLines = 1)
+                        TextButton(onClick = { context.contentResolver.openInputStream(Uri.parse(attachment.uri))?.close() }) { Text("Open") }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Reminder", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { chooseReminder() }) { Text(if (reminderAt == null) "Set" else DateFormat.getDateTimeInstance().format(Date(reminderAt!!))) }
+                    if (reminderAt != null) TextButton(onClick = { reminderAt = null; onSave(draftId, title.ifBlank { "Untitled" }, body, tags, null) }) { Text("Clear") }
+                }
+                if (permissionDenied) Text("Notification permission is needed to show reminders.", color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = tags,
