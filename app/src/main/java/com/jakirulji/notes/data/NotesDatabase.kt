@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, FolderEntity::class], version = 2, exportSchema = true)
+@Database(entities = [NoteEntity::class, FolderEntity::class, AttachmentEntity::class], version = 3, exportSchema = true)
 abstract class NotesDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
 
@@ -26,6 +26,23 @@ abstract class NotesDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN reminderAt INTEGER")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    noteId TEXT NOT NULL,
+                    uri TEXT NOT NULL,
+                    displayName TEXT NOT NULL,
+                    mimeType TEXT NOT NULL,
+                    sizeBytes INTEGER NOT NULL,
+                    addedAt INTEGER NOT NULL,
+                    FOREIGN KEY(noteId) REFERENCES notes(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_attachments_noteId ON attachments(noteId)")
+            }
+        }
+
         @Volatile private var INSTANCE: NotesDatabase? = null
 
         fun getInstance(context: Context): NotesDatabase =
@@ -34,7 +51,7 @@ abstract class NotesDatabase : RoomDatabase() {
                     context.applicationContext,
                     NotesDatabase::class.java,
                     "notes.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { INSTANCE = it }
             }
     }
