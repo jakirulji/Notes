@@ -20,6 +20,12 @@ interface NoteDao {
     @Query("SELECT * FROM attachments WHERE noteId = :noteId ORDER BY addedAt")
     fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>>
 
+    @Query("SELECT * FROM attachments WHERE noteId = :noteId")
+    suspend fun findAttachments(noteId: String): List<AttachmentEntity>
+
+    @Query("SELECT attachments.* FROM attachments INNER JOIN notes ON notes.id = attachments.noteId WHERE notes.trashedAt IS NOT NULL")
+    suspend fun findTrashAttachments(): List<AttachmentEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAttachment(attachment: AttachmentEntity)
 
