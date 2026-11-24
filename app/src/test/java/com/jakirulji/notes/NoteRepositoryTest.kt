@@ -31,6 +31,21 @@ class NoteRepositoryTest {
     }
 
     @Test
+    fun repeatedAutosavesWithDraftIdUpdateOneNote() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        val draftId = "editor-draft-id"
+
+        val firstId = repository.save(draftId, "Draft", "First", 0xFFE8E8D8L)
+        val secondId = repository.save(draftId, "Draft", "Second", 0xFFE8E8D8L)
+
+        assertEquals(draftId, firstId)
+        assertEquals(firstId, secondId)
+        assertEquals(1, dao.items.value.size)
+        assertEquals("Second", dao.items.value.single().content)
+    }
+
+    @Test
     fun updatePreservesIdentityCreationTimeAndPinState() = runBlocking {
         val dao = FakeNoteDao()
         val repository = NoteRepository(dao)
