@@ -2,6 +2,7 @@ package com.jakirulji.notes
 
 import com.jakirulji.notes.data.NoteDao
 import com.jakirulji.notes.data.AttachmentEntity
+import com.jakirulji.notes.data.ChecklistItemEntity
 import com.jakirulji.notes.data.NoteEntity
 import com.jakirulji.notes.data.FolderEntity
 import com.jakirulji.notes.data.FolderRepository
@@ -64,6 +65,25 @@ class NoteRepositoryTest {
         assertTrue(dao.attachments.value.isEmpty())
     }
 
+    @Test
+    fun checklistItemsCanBeAddedCheckedAndRemoved() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        repository.save("check-note", "Tasks", "", 0xFFE8E8D8L)
+        val id = repository.addChecklistItem("check-note", "  Revise anatomy  ")
+        assertEquals(id, repository.checklistItemsOnce("check-note").single().id)
+        assertEquals("Revise anatomy", repository.checklistItemsOnce("check-note").single().text)
+        repository.setChecklistChecked(id, true)
+        assertTrue(repository.checklistItemsOnce("check-note").single().checked)
+        repository.deleteChecklistItem(id)
+        assertTrue(repository.checklistItemsOnce("check-note").isEmpty())
+    }
+    @Test(expected = IllegalArgumentException::class)
+    fun checklistRejectsBlankItems() = runBlocking {
+        val repository = NoteRepository(FakeNoteDao())
+        repository.save("check-note", "Tasks", "", 0xFFE8E8D8L)
+        repository.addChecklistItem("check-note", "  ")
+    }
     @Test
     fun reminderCanBeSetAndCleared() = runBlocking {
         val dao = FakeNoteDao()
@@ -164,6 +184,14 @@ class NoteRepositoryTest {
             return attachments.value.filter { it.noteId in trashedIds }
         }
 
+        val checklist = MutableStateFlow<List<ChecklistItemEntity>>(emptyList())
+        override fun observeChecklist(noteId: String): Flow<List<ChecklistItemEntity>> = MutableStateFlow(checklist.value.filter { it.noteId == noteId })
+        override suspend fun findChecklist(noteId: String): List<ChecklistItemEntity> = checklist.value.filter { it.noteId == noteId }
+        override suspend fun upsertChecklistItem(item: ChecklistItemEntity) { checklist.value = checklist.value.filterNot { it.id == item.id } + item }
+        override suspend fun setChecklistChecked(id: String, checked: Boolean, time: Long) {
+            checklist.value = checklist.value.map { if (it.id == id) it.copy(checked = checked, updatedAt = time) else it }
+        }
+        override suspend fun deleteChecklistItem(id: String) { checklist.value = checklist.value.filterNot { it.id == id } }
         override suspend fun upsertAttachment(attachment: AttachmentEntity) {
             attachments.value = attachments.value.filterNot { it.id == attachment.id } + attachment
         }

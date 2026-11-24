@@ -7,6 +7,19 @@ class NoteRepository(private val dao: NoteDao) {
     fun activeNotes(): Flow<List<NoteEntity>> = dao.observeActive()
     fun trashedNotes(): Flow<List<NoteEntity>> = dao.observeTrash()
     fun attachments(noteId: String): Flow<List<AttachmentEntity>> = dao.observeAttachments(noteId)
+    fun checklistItems(noteId: String): Flow<List<ChecklistItemEntity>> = dao.observeChecklist(noteId)
+    suspend fun checklistItemsOnce(noteId: String): List<ChecklistItemEntity> = dao.findChecklist(noteId)
+    suspend fun addChecklistItem(noteId: String, text: String): String {
+        val cleanText = text.trim()
+        require(cleanText.isNotEmpty()) { "Checklist item cannot be empty" }
+        val now = System.currentTimeMillis()
+        val existing = dao.findChecklist(noteId)
+        val id = UUID.randomUUID().toString()
+        dao.upsertChecklistItem(ChecklistItemEntity(id, noteId, cleanText, false, (existing.maxOfOrNull { it.position } ?: -1) + 1, now, now))
+        return id
+    }
+    suspend fun setChecklistChecked(id: String, checked: Boolean) = dao.setChecklistChecked(id, checked, System.currentTimeMillis())
+    suspend fun deleteChecklistItem(id: String) = dao.deleteChecklistItem(id)
     suspend fun attachmentsOnce(noteId: String): List<AttachmentEntity> = dao.findAttachments(noteId)
     suspend fun trashAttachments(): List<AttachmentEntity> = dao.findTrashAttachments()
 

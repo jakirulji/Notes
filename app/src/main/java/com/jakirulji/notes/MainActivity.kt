@@ -5,6 +5,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jakirulji.notes.data.NoteEntity
+import com.jakirulji.notes.data.ChecklistItemEntity
 import com.jakirulji.notes.data.FolderRepository
 import com.jakirulji.notes.data.NoteRepository
 import com.jakirulji.notes.data.NotesDatabase
@@ -45,6 +47,7 @@ import java.text.DateFormat
 import java.util.Date
 import com.jakirulji.notes.notifications.ReminderScheduler
 import com.jakirulji.notes.storage.AttachmentStorage
+import com.jakirulji.notes.storage.VoiceRecorder
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 
@@ -238,6 +241,15 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                 }
             },
             attachmentsFlow = { id -> repository.attachments(id) },
+            checklistFlow = { id -> repository.checklistItems(id) },
+            onAddChecklistItem = { id, title, body, tags, color, text ->
+                scope.launch {
+                    repository.save(id, title, body, color, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
+                    repository.addChecklistItem(id, text)
+                }
+            },
+            onToggleChecklistItem = { item, checked -> scope.launch { repository.setChecklistChecked(item.id, checked) } },
+            onDeleteChecklistItem = { item -> scope.launch { repository.deleteChecklistItem(item.id) } },
             onDeleteAttachment = { attachmentId -> scope.launch { repository.deleteAttachment(attachmentId) } }
         )
     }
@@ -295,7 +307,11 @@ private fun NoteEditor(
     onSave: (String, String, String, String, Long?, Long) -> Unit,
     onAttach: (String, String, String, String, String, String, String, Long, Long) -> Unit,
     attachmentsFlow: (String) -> kotlinx.coroutines.flow.Flow<List<com.jakirulji.notes.data.AttachmentEntity>>,
-    onDeleteAttachment: (String) -> Unit
+    onDeleteAttachment: (String) -> Unit,
+    checklistFlow: (String) -> kotlinx.coroutines.flow.Flow<List<ChecklistItemEntity>>,
+    onAddChecklistItem: (String, String, String, String, Long, String) -> Unit,
+    onToggleChecklistItem: (ChecklistItemEntity, Boolean) -> Unit,
+    onDeleteChecklistItem: (ChecklistItemEntity) -> Unit
 ) {
     val context = LocalContext.current
     val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
@@ -308,6 +324,11 @@ private fun NoteEditor(
     var selectedColor by rememberSaveable(note?.id) { mutableLongStateOf(note?.color ?: DEFAULT_NOTE_COLOR) }
     var permissionDenied by remember { mutableStateOf(false) }
     var attachmentError by remember { mutableStateOf<String?>(null) }
+    var voiceError by remember { mutableStateOf<String?>(null) }
+    var checklistDraft by rememberSaveable(note?.id) { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    val voiceRecorder = remember(draftId) { VoiceRecorder(context) }
+    val checklist by remember(draftId) { checklistFlow(draftId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val attachmentScope = rememberCoroutineScope()
     val attachmentFlow = remember(draftId) { attachmentsFlow(draftId) }
     val attachments by attachmentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -344,6 +365,23 @@ private fun NoteEditor(
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) attachUri(uri)
     }
+    fun startVoiceRecording() {
+        try { voiceRecorder.start(draftId); isRecording = true; voiceError = null }
+        catch (error: Exception) { voiceError = error.message ?: "Could not start recording."; isRecording = false }
+    }
+    fun stopVoiceRecording() {
+        val file = voiceRecorder.stop()
+        isRecording = false
+        if (file != null) onAttach(
+            draftId, title.ifBlank { "Untitled" }, body,
+            tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
+            file.relativeTo(context.filesDir).invariantSeparatorsPath, "Voice note.m4a", "audio/mp4", file.length(), selectedColor
+        ) else voiceError = "Recording was too short or could not be saved."
+    }
+    val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startVoiceRecording() else voiceError = "Microphone permission is required to record audio."
+    }
+    DisposableEffect(voiceRecorder) { onDispose { voiceRecorder.cancel() } }
     var pendingReminder by remember { mutableStateOf<Long?>(null) }
     fun applyReminder(timestamp: Long) {
         reminderAt = timestamp
@@ -420,6 +458,36 @@ private fun NoteEditor(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp),
                     placeholder = { Text("Start writing…") }
                 )
+                Spacer(Modifier.height(14.dp))
+                Text("Checklist", fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(value = checklistDraft, onValueChange = { checklistDraft = it },
+                        modifier = Modifier.weight(1f), placeholder = { Text("Add a task") }, singleLine = true)
+                    TextButton(enabled = checklistDraft.isNotBlank(), onClick = {
+                        val task = checklistDraft.trim()
+                        if (task.isNotEmpty()) {
+                            onAddChecklistItem(draftId, title.ifBlank { "Untitled" }, body,
+                                tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
+                                selectedColor, task)
+                            checklistDraft = ""
+                        }
+                    }) { Text("Add") }
+                }
+                checklist.forEach { item ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = item.checked, onCheckedChange = { onToggleChecklistItem(item, it) })
+                        Text(item.text, modifier = Modifier.weight(1f), color = if (item.checked) Color.Gray else Ink)
+                        TextButton(onClick = { onDeleteChecklistItem(item) }) { Text("Remove") }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Voice note", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        if (isRecording) stopVoiceRecording() else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }) { Text(if (isRecording) "Stop recording" else "Record") }
+                }
+                if (isRecording) Text("Recording… tap Stop recording to attach the audio.", color = Accent, fontSize = 12.sp)
+                voiceError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Attachments", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

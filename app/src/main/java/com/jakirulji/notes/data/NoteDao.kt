@@ -17,6 +17,17 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE trashedAt IS NOT NULL ORDER BY trashedAt DESC")
     fun observeTrash(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM checklist_items WHERE noteId = :noteId ORDER BY position ASC, createdAt ASC")
+    fun observeChecklist(noteId: String): Flow<List<ChecklistItemEntity>>
+    @Query("SELECT * FROM checklist_items WHERE noteId = :noteId ORDER BY position ASC, createdAt ASC")
+    suspend fun findChecklist(noteId: String): List<ChecklistItemEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertChecklistItem(item: ChecklistItemEntity)
+    @Query("UPDATE checklist_items SET checked = :checked, updatedAt = :time WHERE id = :id")
+    suspend fun setChecklistChecked(id: String, checked: Boolean, time: Long)
+    @Query("DELETE FROM checklist_items WHERE id = :id")
+    suspend fun deleteChecklistItem(id: String)
+
     @Query("SELECT * FROM attachments WHERE noteId = :noteId ORDER BY addedAt")
     fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>>
 

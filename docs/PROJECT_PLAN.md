@@ -16,7 +16,7 @@ Build an offline-first Android notes app inspired by the interaction patterns of
 ### Normal notes
 - Rich-text notes, checklists, folders, tags, pinning, colors, search, reminders, autosave and trash.
 - Image, file and voice attachments.
-- The editor uses a WYSIWYG Compose rich-text component; content is serialized as Markdown for local persistence. The available toolbar formatting is bold, italic, ordered/unordered lists and inline code; explicit heading controls are not currently provided. Note color selection is implemented. Checklist/task-list UX and voice recording remain open M1 acceptance items.
+- The editor uses a WYSIWYG Compose rich-text component; content is serialized as Markdown for local persistence. The available toolbar formatting is bold, italic, ordered/unordered lists and inline code; explicit heading controls are not currently provided. Note color selection, independent Room-backed checklist items (add, check/uncheck, remove), and in-app voice recording to app-private M4A attachments are implemented. M1 still requires successful CI and physical-device acceptance testing.
 - Picked document attachments are copied into app-private storage, persisted by relative path, and exposed to other apps only through a non-exported FileProvider URI grant. Removing an attachment or permanently deleting its note removes the stored copy. Attachments remain unencrypted until the M4 encryption milestone; reinstalling the app or clearing app data removes these local copies.
 - Reliable local persistence and migration between app versions.
 
@@ -92,7 +92,7 @@ sync/conflict/
 - **M6 — Release hardening:** accessibility, performance, migration, security review, test coverage, release signing and documentation.
 
 ## Quality and security test plan
-- Note CRUD, autosave, process death, database migration and attachment integrity.
+- Note CRUD, autosave, process death, database migration through v4, checklist CRUD and attachment integrity.
 - Gesture threshold and scroll-boundary tests; ensure ordinary scrolling cannot accidentally expose the vault.
 - Verify vault isolation across IDs, database queries, search, notifications, widgets, exports and logs.
 - Verify decoy routing and independent key/data separation.

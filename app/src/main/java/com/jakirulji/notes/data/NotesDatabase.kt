@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, FolderEntity::class, AttachmentEntity::class], version = 3, exportSchema = true)
+@Database(entities = [NoteEntity::class, FolderEntity::class, AttachmentEntity::class, ChecklistItemEntity::class], version = 4, exportSchema = true)
 abstract class NotesDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
 
@@ -43,6 +43,17 @@ abstract class NotesDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS checklist_items (
+                    id TEXT NOT NULL PRIMARY KEY, noteId TEXT NOT NULL, text TEXT NOT NULL,
+                    checked INTEGER NOT NULL, position INTEGER NOT NULL, createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    FOREIGN KEY(noteId) REFERENCES notes(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                )""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_checklist_items_noteId ON checklist_items(noteId)")
+            }
+        }
         @Volatile private var INSTANCE: NotesDatabase? = null
 
         fun getInstance(context: Context): NotesDatabase =
@@ -51,7 +62,7 @@ abstract class NotesDatabase : RoomDatabase() {
                     context.applicationContext,
                     NotesDatabase::class.java,
                     "notes.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build().also { INSTANCE = it }
             }
     }
