@@ -123,7 +123,10 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                 FilterChip(selected = showTrash, onClick = { showTrash = true; query = "" }, label = { Text("Trash") })
                 Spacer(Modifier.weight(1f))
                 if (showTrash && trash.isNotEmpty()) {
-                    TextButton(onClick = { scope.launch { repository.emptyTrash() } }) { Text("Empty") }
+                    TextButton(onClick = {
+                        trash.forEach { reminderScheduler.cancel(it.id) }
+                        scope.launch { repository.emptyTrash() }
+                    }) { Text("Empty") }
                 }
             }
             if (!showTrash) {
@@ -173,9 +176,9 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                             onOpen = { if (!showTrash) { editing = note; editorOpen = true } },
                             onMoveFolder = { folderId -> scope.launch { folderRepository.moveNote(note.id, folderId) } },
                             onPin = { scope.launch { repository.togglePin(note) } },
-                            onTrash = { scope.launch { repository.trash(note.id) } },
+                            onTrash = { scope.launch { repository.trash(note.id); reminderScheduler.cancel(note.id) } },
                             onRestore = { scope.launch { repository.restore(note.id) } },
-                            onDeleteForever = { scope.launch { repository.deleteForever(note.id) } }
+                            onDeleteForever = { scope.launch { repository.deleteForever(note.id); reminderScheduler.cancel(note.id) } }
                         )
                     }
                 }
@@ -245,6 +248,10 @@ private fun NoteCard(
             if (note.content.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(note.content, color = Ink.copy(alpha = .72f), fontSize = 13.sp, lineHeight = 19.sp, maxLines = 4)
+            }
+            note.reminderAt?.let { timestamp ->
+                Spacer(Modifier.height(6.dp))
+                Text("REMINDER · " + DateFormat.getDateTimeInstance().format(Date(timestamp)), color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -431,7 +438,10 @@ private fun NoteEditor(
                             val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, attachment.mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             try { context.startActivity(viewIntent) } catch (_: android.content.ActivityNotFoundException) { }
                         }) { Text("Open") }
-                        TextButton(onClick = { onDeleteAttachment(attachment.id) }) { Text("Remove") }
+                        TextButton(onClick = {
+                            try { context.contentResolver.releasePersistableUriPermission(Uri.parse(attachment.uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: SecurityException) { }
+                            onDeleteAttachment(attachment.id)
+                        }) { Text("Remove") }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
