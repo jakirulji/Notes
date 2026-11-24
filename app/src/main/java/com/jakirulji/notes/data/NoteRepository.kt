@@ -7,6 +7,8 @@ class NoteRepository(private val dao: NoteDao) {
     fun activeNotes(): Flow<List<NoteEntity>> = dao.observeActive()
     fun trashedNotes(): Flow<List<NoteEntity>> = dao.observeTrash()
     fun attachments(noteId: String): Flow<List<AttachmentEntity>> = dao.observeAttachments(noteId)
+    suspend fun attachmentsOnce(noteId: String): List<AttachmentEntity> = dao.findAttachments(noteId)
+    suspend fun trashAttachments(): List<AttachmentEntity> = dao.findTrashAttachments()
 
     suspend fun addAttachment(noteId: String, uri: String, name: String, mimeType: String, sizeBytes: Long) {
         dao.upsertAttachment(
