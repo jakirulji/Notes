@@ -45,7 +45,6 @@ import java.util.Calendar
 import java.text.DateFormat
 import java.util.Date
 import com.jakirulji.notes.notifications.ReminderScheduler
-import com.mohamedrejeb.richeditor.model.HeadingStyle
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 
@@ -335,7 +334,7 @@ private fun NoteEditor(
         onAttach(
             draftId, title.ifBlank { "Untitled" }, body,
             tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
-            uri.toString(), displayName, context.contentResolver.getType(uri) ?: "application/octet-stream", sizeBytes
+            uri.toString(), displayName, context.contentResolver.getType(uri) ?: "application/octet-stream", sizeBytes, selectedColor
         )
     }
 
@@ -409,8 +408,6 @@ private fun NoteEditor(
                 ) {
                     TextButton(onClick = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }) { Text("B") }
                     TextButton(onClick = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) }) { Text("I") }
-                    TextButton(onClick = { richTextState.setHeadingStyle(HeadingStyle.H1) }) { Text("H1") }
-                    TextButton(onClick = { richTextState.setHeadingStyle(HeadingStyle.H2) }) { Text("H2") }
                     TextButton(onClick = { richTextState.toggleUnorderedList() }) { Text("• List") }
                     TextButton(onClick = { richTextState.toggleOrderedList() }) { Text("1. List") }
                     TextButton(onClick = { richTextState.toggleCodeSpan() }) { Text("Code") }
