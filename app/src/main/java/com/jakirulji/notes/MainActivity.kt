@@ -217,16 +217,16 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
         NoteEditor(
             note = editing,
             onClose = { editorOpen = false },
-            onSave = { id, title, body, tags, reminderAt ->
+            onSave = { id, title, body, tags, reminderAt, color ->
                 scope.launch {
-                    repository.save(id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
+                    repository.save(id, title, body, color, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
                     repository.setReminder(id, reminderAt)
                     reminderScheduler.schedule(id, title.ifBlank { "Untitled" }, reminderAt)
                 }
             },
-            onAttach = { id, title, body, tags, uri, name, mimeType, sizeBytes ->
+            onAttach = { id, title, body, tags, uri, name, mimeType, sizeBytes, color ->
                 scope.launch {
-                    repository.save(id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
+                    repository.save(id, title, body, color, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
                     repository.addAttachment(id, uri, name, mimeType, sizeBytes)
                 }
             },
@@ -285,8 +285,8 @@ private fun NoteCard(
 private fun NoteEditor(
     note: NoteEntity?,
     onClose: () -> Unit,
-    onSave: (String, String, String, String, Long?) -> Unit,
-    onAttach: (String, String, String, String, String, String, String, Long) -> Unit,
+    onSave: (String, String, String, String, Long?, Long) -> Unit,
+    onAttach: (String, String, String, String, String, String, String, Long, Long) -> Unit,
     attachmentsFlow: (String) -> kotlinx.coroutines.flow.Flow<List<com.jakirulji.notes.data.AttachmentEntity>>,
     onDeleteAttachment: (String) -> Unit
 ) {
@@ -298,6 +298,7 @@ private fun NoteEditor(
     val body = richTextState.toMarkdown()
     var tags by rememberSaveable(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
     var reminderAt by rememberSaveable(note?.id) { mutableStateOf(note?.reminderAt) }
+    var selectedColor by rememberSaveable(note?.id) { mutableLongStateOf(note?.color ?: DEFAULT_NOTE_COLOR) }
     var permissionDenied by remember { mutableStateOf(false) }
     val attachmentFlow = remember(draftId) { attachmentsFlow(draftId) }
     val attachments by attachmentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -343,7 +344,7 @@ private fun NoteEditor(
     var pendingReminder by remember { mutableStateOf<Long?>(null) }
     fun applyReminder(timestamp: Long) {
         reminderAt = timestamp
-        onSave(draftId, title.ifBlank { "Untitled" }, body, tags, timestamp)
+        onSave(draftId, title.ifBlank { "Untitled" }, body, tags, timestamp, selectedColor)
         pendingReminder = null
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -392,6 +393,13 @@ private fun NoteEditor(
                     placeholder = { Text("Title") },
                     singleLine = true
                 )
+                Spacer(Modifier.height(8.dp))
+                Text("Note color", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf(0xFFE8E8D8L, 0xFFFFE7C2L, 0xFFF8D9DCL, 0xFFDCEAF8L, 0xFFE2DDF7L, 0xFFD9EEE5L, 0xFFF0E2D2L).forEach { color ->
+                        FilterChip(selected = selectedColor == color, onClick = { selectedColor = color }, label = { Text("●") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(color.toInt()), containerColor = Color(color.toInt())))
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -433,7 +441,7 @@ private fun NoteEditor(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Reminder", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton(onClick = { chooseReminder() }) { Text(if (reminderAt == null) "Set" else DateFormat.getDateTimeInstance().format(Date(reminderAt!!))) }
-                    if (reminderAt != null) TextButton(onClick = { reminderAt = null; onSave(draftId, title.ifBlank { "Untitled" }, body, tags, null) }) { Text("Clear") }
+                    if (reminderAt != null) TextButton(onClick = { reminderAt = null; onSave(draftId, title.ifBlank { "Untitled" }, body, tags, null, selectedColor) }) { Text("Clear") }
                 }
                 if (permissionDenied) Text("Notification permission is needed to show reminders.", color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
