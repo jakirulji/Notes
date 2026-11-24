@@ -14,5 +14,6 @@ data class NoteEntity(
     val tags: String = "",
     val createdAt: Long,
     val updatedAt: Long,
-    val trashedAt: Long? = null
+    val trashedAt: Long? = null,
+    val reminderAt: Long? = null
 )
