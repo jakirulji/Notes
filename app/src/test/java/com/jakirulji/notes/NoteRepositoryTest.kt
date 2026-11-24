@@ -58,6 +58,8 @@ class NoteRepositoryTest {
         val attachment = dao.attachments.value.single()
         assertEquals("note-a", attachment.noteId)
         assertEquals("scan.pdf", attachment.displayName)
+        assertEquals(1, repository.attachmentsOnce("note-a").size)
+        assertTrue(repository.attachmentsOnce("note-b").isEmpty())
         repository.deleteAttachment(attachment.id)
         assertTrue(dao.attachments.value.isEmpty())
     }
@@ -154,6 +156,13 @@ class NoteRepositoryTest {
 
         override fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>> =
             MutableStateFlow(attachments.value.filter { it.noteId == noteId })
+
+        override suspend fun findAttachments(noteId: String): List<AttachmentEntity> = attachments.value.filter { it.noteId == noteId }
+
+        override suspend fun findTrashAttachments(): List<AttachmentEntity> {
+            val trashedIds = items.value.filter { it.trashedAt != null }.map { it.id }.toSet()
+            return attachments.value.filter { it.noteId in trashedIds }
+        }
 
         override suspend fun upsertAttachment(attachment: AttachmentEntity) {
             attachments.value = attachments.value.filterNot { it.id == attachment.id } + attachment
