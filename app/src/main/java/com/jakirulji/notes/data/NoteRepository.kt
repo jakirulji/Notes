@@ -6,6 +6,26 @@ import java.util.UUID
 class NoteRepository(private val dao: NoteDao) {
     fun activeNotes(): Flow<List<NoteEntity>> = dao.observeActive()
     fun trashedNotes(): Flow<List<NoteEntity>> = dao.observeTrash()
+    fun attachments(noteId: String): Flow<List<AttachmentEntity>> = dao.observeAttachments(noteId)
+
+    suspend fun addAttachment(noteId: String, uri: String, name: String, mimeType: String, sizeBytes: Long) {
+        dao.upsertAttachment(
+            AttachmentEntity(
+                id = UUID.randomUUID().toString(),
+                noteId = noteId,
+                uri = uri,
+                displayName = name,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes,
+                addedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun deleteAttachment(id: String) = dao.deleteAttachment(id)
+
+    suspend fun setReminder(id: String, reminderAt: Long?) =
+        dao.setReminder(id, reminderAt, System.currentTimeMillis())
 
     suspend fun save(
         id: String?,
