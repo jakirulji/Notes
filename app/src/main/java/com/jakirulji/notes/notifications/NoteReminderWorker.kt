@@ -31,7 +31,7 @@ class NoteReminderWorker(
         ) return Result.success()
 
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_menu_edit)
             .setContentTitle("Notes reminder")
             .setContentText(title)
             .setStyle(NotificationCompat.BigTextStyle().bigText(title))
