@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,6 +44,7 @@ import java.util.Calendar
 import java.text.DateFormat
 import java.util.Date
 import com.jakirulji.notes.notifications.ReminderScheduler
+import com.jakirulji.notes.storage.AttachmentStorage
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 
@@ -299,6 +299,8 @@ private fun NoteEditor(
     var reminderAt by rememberSaveable(note?.id) { mutableStateOf(note?.reminderAt) }
     var selectedColor by rememberSaveable(note?.id) { mutableLongStateOf(note?.color ?: DEFAULT_NOTE_COLOR) }
     var permissionDenied by remember { mutableStateOf(false) }
+    var attachmentError by remember { mutableStateOf<String?>(null) }
+    val attachmentScope = rememberCoroutineScope()
     val attachmentFlow = remember(draftId) { attachmentsFlow(draftId) }
     val attachments by attachmentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
@@ -316,26 +318,19 @@ private fun NoteEditor(
     }
 
     fun attachUri(uri: Uri) {
-        try {
-            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: SecurityException) {
-            // Some document providers do not expose persistable grants; the attachment remains best-effort.
-        }
-        var displayName = uri.lastPathSegment ?: "Attachment"
-        var sizeBytes = -1L
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (nameIndex >= 0) displayName = cursor.getString(nameIndex) ?: displayName
-                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) sizeBytes = cursor.getLong(sizeIndex)
+        attachmentScope.launch {
+            attachmentError = null
+            try {
+                val stored = AttachmentStorage.import(context, uri, draftId)
+                onAttach(
+                    draftId, title.ifBlank { "Untitled" }, body,
+                    tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
+                    stored.relativePath, stored.displayName, stored.mimeType, stored.sizeBytes, selectedColor
+                )
+            } catch (error: Exception) {
+                attachmentError = error.message ?: "Unable to save this attachment."
             }
         }
-        onAttach(
-            draftId, title.ifBlank { "Untitled" }, body,
-            tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", "),
-            uri.toString(), displayName, context.contentResolver.getType(uri) ?: "application/octet-stream", sizeBytes, selectedColor
-        )
     }
 
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -426,16 +421,22 @@ private fun NoteEditor(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(attachment.displayName, modifier = Modifier.weight(1f), maxLines = 1)
                         TextButton(onClick = {
-                            val uri = Uri.parse(attachment.uri)
-                            val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, attachment.mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            try { context.startActivity(viewIntent) } catch (_: android.content.ActivityNotFoundException) { }
+                            try {
+                                val uri = AttachmentStorage.contentUri(context, attachment.uri)
+                                val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, attachment.mimeType)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                context.startActivity(viewIntent)
+                            } catch (_: Exception) {
+                                attachmentError = "This attachment is missing or cannot be opened."
+                            }
                         }) { Text("Open") }
                         TextButton(onClick = {
-                            try { context.contentResolver.releasePersistableUriPermission(Uri.parse(attachment.uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: SecurityException) { }
+                            AttachmentStorage.delete(context, attachment.uri)
                             onDeleteAttachment(attachment.id)
                         }) { Text("Remove") }
                     }
                 }
+                attachmentError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Reminder", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton(onClick = { chooseReminder() }) { Text(if (reminderAt == null) "Set" else DateFormat.getDateTimeInstance().format(Date(reminderAt!!))) }
