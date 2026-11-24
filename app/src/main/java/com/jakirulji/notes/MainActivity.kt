@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -280,11 +282,32 @@ private fun NoteEditor(
     val context = LocalContext.current
     val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
     var title by rememberSaveable(note?.id) { mutableStateOf(note?.title.orEmpty()) }
-    var body by rememberSaveable(note?.id) { mutableStateOf(note?.content.orEmpty()) }
+    var bodyValue by rememberSaveable(note?.id, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(note?.content.orEmpty())) }
+    val body = bodyValue.text
     var tags by rememberSaveable(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
     var reminderAt by rememberSaveable(note?.id) { mutableStateOf(note?.reminderAt) }
     var permissionDenied by remember { mutableStateOf(false) }
-    val attachments by attachmentsFlow(draftId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val attachmentFlow = remember(draftId) { attachmentsFlow(draftId) }
+    val attachments by attachmentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    fun applyInlineFormat(prefix: String, suffix: String = prefix) {
+        val text = bodyValue.text
+        val start = minOf(bodyValue.selection.start, bodyValue.selection.end).coerceIn(0, text.length)
+        val end = maxOf(bodyValue.selection.start, bodyValue.selection.end).coerceIn(0, text.length)
+        val selected = text.substring(start, end)
+        val replacement = "$prefix$selected$suffix"
+        val updated = text.replaceRange(start, end, replacement)
+        val cursor = if (start == end) start + prefix.length else start + replacement.length
+        bodyValue = TextFieldValue(updated, TextRange(cursor.coerceIn(0, updated.length)))
+    }
+
+    fun applyLinePrefix(prefix: String) {
+        val text = bodyValue.text
+        val cursor = bodyValue.selection.start.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (cursor == 0) 0 else it + 1 }
+        val updated = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+        bodyValue = TextFieldValue(updated, TextRange((cursor + prefix.length).coerceAtMost(updated.length)))
+    }
 
     fun persistDraft() {
         if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
@@ -377,9 +400,20 @@ private fun NoteEditor(
                     singleLine = true
                 )
                 Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(onClick = { applyInlineFormat("**") }) { Text("B") }
+                    TextButton(onClick = { applyInlineFormat("_") }) { Text("I") }
+                    TextButton(onClick = { applyLinePrefix("# ") }) { Text("H1") }
+                    TextButton(onClick = { applyLinePrefix("- ") }) { Text("List") }
+                    TextButton(onClick = { applyLinePrefix("- [ ] ") }) { Text("☐ Task") }
+                }
                 OutlinedTextField(
-                    value = body,
-                    onValueChange = { body = it },
+                    value = bodyValue,
+                    onValueChange = { bodyValue = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Start writing…") },
                     minLines = 5
