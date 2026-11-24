@@ -41,6 +41,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // Kotlin 2.0.21 / Compose 1.7.x compatible WYSIWYG editor.
+    implementation("com.mohamedrejeb.richeditor:richeditor-compose:1.0.0-rc10")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
