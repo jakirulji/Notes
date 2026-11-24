@@ -1,6 +1,7 @@
 package com.jakirulji.notes
 
 import com.jakirulji.notes.data.NoteDao
+import com.jakirulji.notes.data.AttachmentEntity
 import com.jakirulji.notes.data.NoteEntity
 import com.jakirulji.notes.data.FolderEntity
 import com.jakirulji.notes.data.FolderRepository
@@ -43,6 +44,35 @@ class NoteRepositoryTest {
         assertEquals(firstId, secondId)
         assertEquals(1, dao.items.value.size)
         assertEquals("Second", dao.items.value.single().content)
+    }
+
+    @Test
+    fun attachmentsAreScopedToTheirNoteAndCanBeRemoved() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        repository.save("note-a", "A", "", 0xFFE8E8D8L)
+        repository.save("note-b", "B", "", 0xFFE8E8D8L)
+
+        repository.addAttachment("note-a", "content://provider/file/1", "scan.pdf", "application/pdf", 1200L)
+
+        val attachment = dao.attachments.value.single()
+        assertEquals("note-a", attachment.noteId)
+        assertEquals("scan.pdf", attachment.displayName)
+        repository.deleteAttachment(attachment.id)
+        assertTrue(dao.attachments.value.isEmpty())
+    }
+
+    @Test
+    fun reminderCanBeSetAndCleared() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        repository.save("reminder-note", "Exam", "", 0xFFE8E8D8L)
+
+        repository.setReminder("reminder-note", 123456L)
+        assertEquals(123456L, dao.items.value.single().reminderAt)
+
+        repository.setReminder("reminder-note", null)
+        assertNull(dao.items.value.single().reminderAt)
     }
 
     @Test
@@ -105,6 +135,18 @@ class NoteRepositoryTest {
     private class FakeNoteDao : NoteDao {
         val items = MutableStateFlow<List<NoteEntity>>(emptyList())
         private val folders = MutableStateFlow<List<FolderEntity>>(emptyList())
+        private val attachments = MutableStateFlow<List<AttachmentEntity>>(emptyList())
+
+        override fun observeAttachments(noteId: String): Flow<List<AttachmentEntity>> =
+            MutableStateFlow(attachments.value.filter { it.noteId == noteId })
+
+        override suspend fun upsertAttachment(attachment: AttachmentEntity) {
+            attachments.value = attachments.value.filterNot { it.id == attachment.id } + attachment
+        }
+
+        override suspend fun deleteAttachment(id: String) {
+            attachments.value = attachments.value.filterNot { it.id == id }
+        }
 
         override fun observeActive(): Flow<List<NoteEntity>> =
             MutableStateFlow(items.value.filter { it.trashedAt == null })
@@ -153,6 +195,12 @@ class NoteRepositoryTest {
 
         override suspend fun emptyTrash() {
             items.value = items.value.filter { it.trashedAt == null }
+        }
+
+        override suspend fun setReminder(id: String, reminderAt: Long?, time: Long) {
+            items.value = items.value.map {
+                if (it.id == id) it.copy(reminderAt = reminderAt, updatedAt = time) else it
+            }
         }
 
         override suspend fun setPinned(id: String, pinned: Boolean, time: Long) {
