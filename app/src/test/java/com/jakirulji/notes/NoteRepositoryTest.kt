@@ -79,10 +79,11 @@ class NoteRepositoryTest {
         assertTrue(repository.checklistItemsOnce("check-note").isEmpty())
     }
     @Test(expected = IllegalArgumentException::class)
-    fun checklistRejectsBlankItems() = runBlocking {
+    fun checklistRejectsBlankItems(): Unit = runBlocking {
         val repository = NoteRepository(FakeNoteDao())
         repository.save("check-note", "Tasks", "", 0xFFE8E8D8L)
         repository.addChecklistItem("check-note", "  ")
+        Unit
     }
     @Test
     fun reminderCanBeSetAndCleared() = runBlocking {
