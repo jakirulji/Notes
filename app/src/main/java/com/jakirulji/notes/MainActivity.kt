@@ -373,7 +373,7 @@ private fun NoteEditor(
         }, now.get(Calendar.YEAR), now.get(Calendar.MONTH), now.get(Calendar.DAY_OF_MONTH)).show()
     }
 
-    LaunchedEffect(draftId, title, body, tags, reminderAt) {
+    LaunchedEffect(draftId, title, body, tags, reminderAt, selectedColor) {
         if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
             delay(700)
             persistDraft()
