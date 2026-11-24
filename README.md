@@ -2,7 +2,7 @@
 
 An offline-first Android notes app with a calm, premium interface and privacy-focused vault features.
 
-**Current status:** M1 is in progress. The app now stores normal notes in a local Room database and includes create/edit, search, pin/unpin, trash, restore and permanent deletion. Folder creation/filtering, moving notes between folders, and comma-separated note tags are now available. Room schema export is configured for checked-in migration snapshots. Rich text, attachments, reminders, reliable autosave, hidden vault, decoy vault, encryption and encrypted backup are not yet complete.
+**Current status:** M1 is in progress. The app now stores normal notes in a local Room database and includes create/edit, search, pin/unpin, trash, restore and permanent deletion. Folder creation/filtering, moving notes between folders, comma-separated note tags, and a 700 ms debounced editor autosave are now available. Draft IDs remain stable across repeated autosaves, preventing duplicate notes. Room schema export is configured for checked-in migration snapshots. Rich text, attachments, reminders, hidden vault, decoy vault, encryption and encrypted backup are not yet complete.
 
 ## Development
 
