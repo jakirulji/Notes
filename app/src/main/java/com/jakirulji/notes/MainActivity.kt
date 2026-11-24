@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,7 +25,9 @@ import com.jakirulji.notes.data.NoteEntity
 import com.jakirulji.notes.data.FolderRepository
 import com.jakirulji.notes.data.NoteRepository
 import com.jakirulji.notes.data.NotesDatabase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private val Ink = Color(0xFF20211F)
 private val Paper = Color(0xFFF7F6F1)
@@ -190,10 +193,9 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
         NoteEditor(
             note = editing,
             onClose = { editorOpen = false },
-            onSave = { title, body, tags ->
+            onSave = { id, title, body, tags ->
                 scope.launch {
-                    repository.save(editing?.id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
-                    editorOpen = false
+                    repository.save(id, title, body, editing?.color ?: DEFAULT_NOTE_COLOR, tags = tags, folderId = editing?.folderId ?: selectedFolderId)
                 }
             }
         )
@@ -242,23 +244,70 @@ private fun NoteCard(
 }
 
 @Composable
-private fun NoteEditor(note: NoteEntity?, onClose: () -> Unit, onSave: (String, String, String) -> Unit) {
-    var title by remember(note?.id) { mutableStateOf(note?.title.orEmpty()) }
-    var body by remember(note?.id) { mutableStateOf(note?.content.orEmpty()) }
-    var tags by remember(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
+private fun NoteEditor(
+    note: NoteEntity?,
+    onClose: () -> Unit,
+    onSave: (String, String, String, String) -> Unit
+) {
+    val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
+    var title by rememberSaveable(note?.id) { mutableStateOf(note?.title.orEmpty()) }
+    var body by rememberSaveable(note?.id) { mutableStateOf(note?.content.orEmpty()) }
+    var tags by rememberSaveable(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
+
+    fun persistDraft() {
+        if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
+            onSave(
+                draftId,
+                title.ifBlank { "Untitled" },
+                body,
+                tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")
+            )
+        }
+    }
+
+    LaunchedEffect(draftId, title, body, tags) {
+        if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
+            delay(700)
+            persistDraft()
+        }
+    }
+
     AlertDialog(
-        onDismissRequest = onClose, containerColor = Paper,
+        onDismissRequest = { persistDraft(); onClose() },
+        containerColor = Paper,
         title = { Text(if (note == null) "New note" else "Edit note", fontWeight = FontWeight.SemiBold) },
         text = {
             Column {
-                OutlinedTextField(value = title, onValueChange = { title = it }, placeholder = { Text("Title") }, singleLine = true)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Title") },
+                    singleLine = true
+                )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = body, onValueChange = { body = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Start writing…") }, minLines = 5)
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Start writing…") },
+                    minLines = 5
+                )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = tags, onValueChange = { tags = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Tags (comma separated)") }, singleLine = true)
+                OutlinedTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Tags (comma separated)") },
+                    singleLine = true
+                )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(title.ifBlank { "Untitled" }, body, tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(", ")) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
+        confirmButton = {
+            TextButton(onClick = { persistDraft(); onClose() }) { Text("Done") }
+        },
+        dismissButton = {
+            TextButton(onClick = { persistDraft(); onClose() }) { Text("Close") }
+        }
     )
 }
