@@ -221,7 +221,8 @@ private fun NotesApp(repository: NoteRepository, folderRepository: FolderReposit
                     repository.addAttachment(id, uri, name, mimeType, sizeBytes)
                 }
             },
-            attachmentsFlow = { id -> repository.attachments(id) }
+            attachmentsFlow = { id -> repository.attachments(id) },
+            onDeleteAttachment = { attachmentId -> scope.launch { repository.deleteAttachment(attachmentId) } }
         )
     }
 }
@@ -273,7 +274,8 @@ private fun NoteEditor(
     onClose: () -> Unit,
     onSave: (String, String, String, String, Long?) -> Unit,
     onAttach: (String, String, String, String, String, String, String, Long) -> Unit,
-    attachmentsFlow: (String) -> kotlinx.coroutines.flow.Flow<List<com.jakirulji.notes.data.AttachmentEntity>>
+    attachmentsFlow: (String) -> kotlinx.coroutines.flow.Flow<List<com.jakirulji.notes.data.AttachmentEntity>>,
+    onDeleteAttachment: (String) -> Unit
 ) {
     val context = LocalContext.current
     val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
@@ -390,7 +392,12 @@ private fun NoteEditor(
                 attachments.forEach { attachment ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(attachment.displayName, modifier = Modifier.weight(1f), maxLines = 1)
-                        TextButton(onClick = { context.contentResolver.openInputStream(Uri.parse(attachment.uri))?.close() }) { Text("Open") }
+                        TextButton(onClick = {
+                            val uri = Uri.parse(attachment.uri)
+                            val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, attachment.mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            try { context.startActivity(viewIntent) } catch (_: android.content.ActivityNotFoundException) { }
+                        }) { Text("Open") }
+                        TextButton(onClick = { onDeleteAttachment(attachment.id) }) { Text("Remove") }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
