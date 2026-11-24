@@ -96,6 +96,21 @@ class NoteRepositoryTest {
     }
 
     @Test
+    fun autosavePreservesExistingReminder() = runBlocking {
+        val dao = FakeNoteDao()
+        val repository = NoteRepository(dao)
+        val original = NoteEntity(
+            id = "reminder-preserve", title = "Exam", content = "Review",
+            color = 0xFFE8E8D8L, createdAt = 1L, updatedAt = 1L, reminderAt = 987654L
+        )
+        dao.upsert(original)
+
+        repository.save(original.id, "Exam update", "Review again", original.color)
+
+        assertEquals(987654L, dao.items.value.single().reminderAt)
+    }
+
+    @Test
     fun trashRestoreAndPermanentDeleteHaveDistinctSemantics() = runBlocking {
         val dao = FakeNoteDao()
         val repository = NoteRepository(dao)
