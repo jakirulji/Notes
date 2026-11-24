@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -398,7 +399,7 @@ private fun NoteEditor(
         containerColor = Paper,
         title = { Text(if (note == null) "New note" else "Edit note", fontWeight = FontWeight.SemiBold) },
         text = {
-            Column {
+            Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
