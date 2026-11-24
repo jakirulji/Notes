@@ -24,7 +24,7 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug
       - name: Upload final-check APK
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-apk]')
         uses: actions/upload-artifact@v4
         with:
           name: Notes-debug-apk
