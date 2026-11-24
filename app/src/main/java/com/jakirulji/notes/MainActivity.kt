@@ -29,8 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +45,9 @@ import java.util.Calendar
 import java.text.DateFormat
 import java.util.Date
 import com.jakirulji.notes.notifications.ReminderScheduler
+import com.mohamedrejeb.richeditor.model.HeadingStyle
+import com.mohamedrejeb.richeditor.model.rememberRichTextState
+import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 
 private val Ink = Color(0xFF20211F)
 private val Paper = Color(0xFFF7F6F1)
@@ -290,32 +293,14 @@ private fun NoteEditor(
     val context = LocalContext.current
     val draftId = rememberSaveable(note?.id) { note?.id ?: UUID.randomUUID().toString() }
     var title by rememberSaveable(note?.id) { mutableStateOf(note?.title.orEmpty()) }
-    var bodyValue by rememberSaveable(note?.id, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(note?.content.orEmpty())) }
-    val body = bodyValue.text
+    val richTextState = rememberRichTextState()
+    LaunchedEffect(note?.id) { richTextState.setMarkdown(note?.content.orEmpty()) }
+    val body = richTextState.toMarkdown()
     var tags by rememberSaveable(note?.id) { mutableStateOf(note?.tags.orEmpty()) }
     var reminderAt by rememberSaveable(note?.id) { mutableStateOf(note?.reminderAt) }
     var permissionDenied by remember { mutableStateOf(false) }
     val attachmentFlow = remember(draftId) { attachmentsFlow(draftId) }
     val attachments by attachmentFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-
-    fun applyInlineFormat(prefix: String, suffix: String = prefix) {
-        val text = bodyValue.text
-        val start = minOf(bodyValue.selection.start, bodyValue.selection.end).coerceIn(0, text.length)
-        val end = maxOf(bodyValue.selection.start, bodyValue.selection.end).coerceIn(0, text.length)
-        val selected = text.substring(start, end)
-        val replacement = "$prefix$selected$suffix"
-        val updated = text.replaceRange(start, end, replacement)
-        val cursor = if (start == end) start + prefix.length else start + replacement.length
-        bodyValue = TextFieldValue(updated, TextRange(cursor.coerceIn(0, updated.length)))
-    }
-
-    fun applyLinePrefix(prefix: String) {
-        val text = bodyValue.text
-        val cursor = bodyValue.selection.start.coerceIn(0, text.length)
-        val lineStart = text.lastIndexOf('\n', (cursor - 1).coerceAtLeast(0)).let { if (cursor == 0) 0 else it + 1 }
-        val updated = text.substring(0, lineStart) + prefix + text.substring(lineStart)
-        bodyValue = TextFieldValue(updated, TextRange((cursor + prefix.length).coerceAtMost(updated.length)))
-    }
 
     fun persistDraft() {
         if (title.isNotBlank() || body.isNotBlank() || tags.isNotBlank()) {
@@ -413,18 +398,18 @@ private fun NoteEditor(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    TextButton(onClick = { applyInlineFormat("**") }) { Text("B") }
-                    TextButton(onClick = { applyInlineFormat("_") }) { Text("I") }
-                    TextButton(onClick = { applyLinePrefix("# ") }) { Text("H1") }
-                    TextButton(onClick = { applyLinePrefix("- ") }) { Text("List") }
-                    TextButton(onClick = { applyLinePrefix("- [ ] ") }) { Text("☐ Task") }
+                    TextButton(onClick = { richTextState.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }) { Text("B") }
+                    TextButton(onClick = { richTextState.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) }) { Text("I") }
+                    TextButton(onClick = { richTextState.setHeadingStyle(HeadingStyle.H1) }) { Text("H1") }
+                    TextButton(onClick = { richTextState.setHeadingStyle(HeadingStyle.H2) }) { Text("H2") }
+                    TextButton(onClick = { richTextState.toggleUnorderedList() }) { Text("• List") }
+                    TextButton(onClick = { richTextState.toggleOrderedList() }) { Text("1. List") }
+                    TextButton(onClick = { richTextState.toggleCodeSpan() }) { Text("Code") }
                 }
-                OutlinedTextField(
-                    value = bodyValue,
-                    onValueChange = { bodyValue = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Start writing…") },
-                    minLines = 5
+                RichTextEditor(
+                    state = richTextState,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp),
+                    placeholder = { Text("Start writing…") }
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
