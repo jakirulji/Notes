@@ -16,6 +16,7 @@ Build an offline-first Android notes app inspired by the interaction patterns of
 ### Normal notes
 - Rich-text notes, checklists, folders, tags, pinning, colors, search, reminders, autosave and trash.
 - Image, file and voice attachments.
+- Current editor supports URI-based file attachments and scheduled local reminders; true rich-text editing and voice recording remain to be implemented.
 - Reliable local persistence and migration between app versions.
 
 ### Hidden Vault
